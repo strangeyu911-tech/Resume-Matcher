@@ -679,6 +679,15 @@
       "selectedProvider": "已选择：{provider}",
       "modelLabel": "模型",
       "defaultModel": "默认：{model}",
+      "workbuddyNotice": "无需 API Key —— 直接使用本机 WorkBuddy 账号额度",
+      "workbuddyStatusReady": "已检测到 WorkBuddy CLI {version}。",
+      "workbuddyStatusUnavailable": "本机未找到 WorkBuddy。",
+      "workbuddyRestart": "重启 app-server",
+      "workbuddyRescan": "重新扫描安装",
+      "workbuddyRunning": "app-server 运行中（{model}）",
+      "workbuddyIdle": "app-server 空闲（首次调用时自动启动）",
+      "workbuddyRestartDone": "app-server 已停止，下次请求会重新启动。",
+      "workbuddyModelHint": "模型 ID 来自本机 WorkBuddy CLI。可从列表选择，也可填写当前版本支持的其他 ID。 保存后自动生效——本地进程会以新模型自动重启。",
       "apiKeyLabel": "API 密钥",
       "apiKeyOptionalForOllama": "（Ollama 可选）",
       "apiKeyOptional": "（可选）",
@@ -715,11 +724,20 @@
         "health_check_failed": "健康检查失败。",
         "duplicate_v1_path": "健康检查失败。Base URL 可能包含重复的 /v1 路径。",
         "not_found_404": "健康检查失败。404 未找到，请检查 Base URL 是否与提供方匹配。",
-        "html_response": "健康检查失败。Base URL 返回了 HTML，可能是控制台地址或网关不支持该路径。"
+        "html_response": "健康检查失败。Base URL 返回了 HTML，可能是控制台地址或网关不支持该路径。",
+        "CODEBUDDY_BINARY_NOT_FOUND": "未找到 WorkBuddy CLI。请安装并登录 WorkBuddy，或设置 WORKBUDDY_CLI_PATH。",
+        "CODEBUDDY_RUNTIME_NOT_FOUND": "未找到可用于启动 WorkBuddy app-server 的 Node.js 运行时。请设置 WORKBUDDY_NODE_PATH 指向 Node 18+。",
+        "CODEBUDDY_LOGIN_REQUIRED": "WorkBuddy 拒绝了 app-server 凭据。请打开 WorkBuddy 登录后重新测试。",
+        "CODEBUDDY_API_INCOMPATIBLE": "当前 WorkBuddy CLI 版本无法承载 app-server。请升级 WorkBuddy 后重试。",
+        "CODEBUDDY_SESSION_FAILED": "WorkBuddy app-server 启动失败。请确认 WorkBuddy 已安装并已登录。",
+        "CODEBUDDY_TURN_FAILED": "WorkBuddy app-server 未能完成本次请求。请重试，或重启 app-server。",
+        "CODEBUDDY_MODEL_UNAVAILABLE": "WorkBuddy 当前无法使用该模型。请从列表中选择其他模型。"
       },
       "healthWarnings": {
-        "empty_content": "健康检查返回了空内容。"
-      }
+        "empty_content": "健康检查返回了空内容。",
+        "workbuddy_unverified": "已检测到 WorkBuddy，但尚未验证。请点击「测试连接」确认账号与模型可用。"
+      },
+      "workbuddyShutdownHint": "提示：请通过关闭后端窗口来停止后端——优雅退出会自动回收 WorkBuddy 模型进程。若在任务管理器中强制结束后端，模型子进程会残留在后台继续占用资源。"
     },
     "contentGeneration": {
       "title": "内容生成",

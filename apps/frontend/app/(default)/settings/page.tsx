@@ -22,6 +22,8 @@ import {
   deleteApiKey,
   llmProviderToKeyProvider,
   API_KEY_PROVIDER_INFO,
+  fetchWorkBuddyStatus,
+  restartWorkBuddyAppServer,
   type LLMConfigUpdate,
   type LLMProvider,
   type LLMHealthCheck,
@@ -30,6 +32,7 @@ import {
   type FeaturePromptsUpdate,
   type ApiKeyProviderStatus,
   type ApiKeyProvider,
+  type WorkBuddyStatus,
 } from '@/lib/api/config';
 import { API_URL } from '@/lib/api/client';
 import { getVersionString } from '@/lib/config/version';
@@ -69,6 +72,8 @@ import type { Locale } from '@/i18n/config';
 type Status = 'idle' | 'loading' | 'saving' | 'saved' | 'error' | 'testing';
 
 const PROVIDERS: LLMProvider[] = [
+  // First: it is the only provider that works with no API key and no endpoint.
+  'workbuddy',
   'openai',
   'openai_compatible',
   'azure_foundry',
@@ -123,6 +128,13 @@ export default function SettingsPage() {
   // Per-provider encrypted key store status (drives the saved/empty hints and
   // the provider key list). Keyed by key-store provider name.
   const [apiKeyStatuses, setApiKeyStatuses] = useState<ApiKeyProviderStatus[]>([]);
+  // WorkBuddy app-server provider: discovered runtime + model catalog. Only
+  // loaded while that provider is selected — the endpoint is cheap, but there
+  // is no reason to call it for providers that don't use it.
+  const [workbuddyStatus, setWorkbuddyStatus] = useState<WorkBuddyStatus | null>(null);
+  const [workbuddyError, setWorkbuddyError] = useState<string | null>(null);
+  const [workbuddyRestarting, setWorkbuddyRestarting] = useState(false);
+  const [workbuddyRestartNote, setWorkbuddyRestartNote] = useState<string | null>(null);
   // 'auto' is the UI sentinel for "do not send reasoning_effort". Maps to
   // empty string when persisted to the backend (so gpt-5 auto-migration
   // won't re-fire on next load). Typed tightly so invalid values can't leak
@@ -355,6 +367,51 @@ export default function SettingsPage() {
     return apiKeyStatuses.some((s) => s.provider === keyProvider && s.configured);
   };
 
+  // Load the WorkBuddy app-server state whenever that provider is selected.
+  // Cheap by design: the backend answers from CLI discovery plus whatever
+  // process is already running, and never starts a gateway for a read.
+  useEffect(() => {
+    if (provider !== 'workbuddy') return;
+    let cancelled = false;
+
+    void (async () => {
+      try {
+        const status = await fetchWorkBuddyStatus();
+        if (!cancelled) {
+          setWorkbuddyStatus(status);
+          setWorkbuddyError(null);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setWorkbuddyStatus(null);
+          setWorkbuddyError(err instanceof Error ? err.message : String(err));
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [provider]);
+
+  // Recovery action: stop the app-server so the next request starts a fresh
+  // one. `refreshDiscovery` also drops the backend's cached CLI lookup — what
+  // you want after installing or upgrading WorkBuddy.
+  const handleRestartWorkBuddy = async (refreshDiscovery: boolean) => {
+    setWorkbuddyRestarting(true);
+    setWorkbuddyRestartNote(null);
+    try {
+      await restartWorkBuddyAppServer(refreshDiscovery);
+      setWorkbuddyStatus(await fetchWorkBuddyStatus());
+      setWorkbuddyRestartNote(t('settings.llmConfiguration.workbuddyRestartDone'));
+      setWorkbuddyError(null);
+    } catch (err) {
+      setWorkbuddyError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setWorkbuddyRestarting(false);
+    }
+  };
+
   // Re-fetch the per-provider key status (after save/delete/clear).
   const refreshApiKeyStatus = async (): Promise<ApiKeyProviderStatus[]> => {
     const status = await fetchApiKeyStatus().catch(() => null);
@@ -433,7 +490,12 @@ export default function SettingsPage() {
       // shared config slot, so saving one provider never wipes another's key.
       if (trimmedKey) {
         const keyProvider = llmProviderToKeyProvider(provider);
-        await updateApiKeys({ [keyProvider]: trimmedKey } as Record<ApiKeyProvider, string>);
+        // null => this provider has no key slot (workbuddy). The key field is
+        // hidden for such providers, so a value here can only be a leftover;
+        // drop it rather than inventing a slot the backend never reads.
+        if (keyProvider) {
+          await updateApiKeys({ [keyProvider]: trimmedKey } as Record<ApiKeyProvider, string>);
+        }
       }
 
       // (2) Persist non-secret LLM config — WITHOUT api_key.
@@ -666,6 +728,14 @@ export default function SettingsPage() {
 
   const requiresApiKey = providerInfo.requiresKey ?? true;
   const requiresApiBase = providerInfo.requiresBaseUrl ?? false;
+  // Providers whose transport the backend owns end to end (currently only
+  // workbuddy). No key is ever transmitted and an endpoint would be
+  // meaningless, so both fields are hidden and replaced with an explanation of
+  // what the provider actually needs.
+  const backendManaged = providerInfo.backendManaged ?? false;
+  // Model ids come from the backend (single source of truth: the CLI's own
+  // model list) so they can never drift from what the app-server accepts.
+  const modelSuggestions = workbuddyStatus?.models ?? [];
   // M-04: provider-specific base-URL copy comes from the message catalogs, not
   // English literals in PROVIDER_INFO — otherwise this whole block reverted to
   // English inside an otherwise fully-translated settings page.
@@ -928,7 +998,17 @@ export default function SettingsPage() {
                   onChange={(e) => setModel(e.target.value)}
                   placeholder={providerInfo.defaultModel}
                   className="font-mono"
+                  // Suggestions only: a hand-typed id still wins, so a newer
+                  // WorkBuddy CLI model that this build doesn't list keeps working.
+                  list={modelSuggestions.length > 0 ? 'workbuddy-model-options' : undefined}
                 />
+                {modelSuggestions.length > 0 && (
+                  <datalist id="workbuddy-model-options">
+                    {modelSuggestions.map((id) => (
+                      <option key={id} value={id} />
+                    ))}
+                  </datalist>
+                )}
                 <p className="text-xs text-steel-grey font-mono">
                   {t('settings.llmConfiguration.defaultModel', {
                     model: providerInfo.defaultModel,
@@ -942,33 +1022,110 @@ export default function SettingsPage() {
                   their deployment needs auth (e.g., a secured LM Studio or a
                   hosted OpenAI-compatible proxy). Save-time validation only
                   fails when `requiresApiKey` is true. */}
-              <div className="space-y-2">
-                <Label htmlFor="apiKey">
-                  {t('settings.llmConfiguration.apiKeyLabel')}{' '}
-                  {!requiresApiKey && (
-                    <span className="text-steel-grey">
-                      {t('settings.llmConfiguration.apiKeyOptional')}
-                    </span>
-                  )}
-                </Label>
-                <Input
-                  id="apiKey"
-                  type="password"
-                  value={apiKey}
-                  onChange={(e) => setApiKey(e.target.value)}
-                  placeholder={
-                    requiresApiKey
-                      ? t('settings.llmConfiguration.apiKeyPlaceholder')
-                      : t('settings.llmConfiguration.apiKeyOptionalPlaceholder')
-                  }
-                  className="font-mono"
-                />
-                {hasStoredApiKey && !apiKey && (
-                  <p className="text-xs text-steel-grey font-mono">
-                    {t('settings.llmConfiguration.leaveBlankToKeepExistingKey')}
+              {/* WorkBuddy app-server: the backend owns discovery, process
+                  lifecycle, and the endpoint, so key/endpoint fields are
+                  hidden and replaced with live runtime state. */}
+              {backendManaged && (
+                <div className="space-y-3 border border-black bg-paper-tint p-4 shadow-sw-xs">
+                  <p className="font-mono text-xs uppercase tracking-wide text-ink-soft">
+                    {t('settings.llmConfiguration.workbuddyNotice')}
                   </p>
-                )}
-              </div>
+
+                  {workbuddyError && (
+                    <p className="font-mono text-xs text-destructive">
+                      {t('settings.llmConfiguration.errorPrefix', { error: workbuddyError })}
+                    </p>
+                  )}
+
+                  {workbuddyStatus &&
+                    (workbuddyStatus.distribution.available ? (
+                      <p className="font-mono text-xs text-ink-soft">
+                        {t('settings.llmConfiguration.workbuddyStatusReady', {
+                          version: workbuddyStatus.distribution.cli_version ?? '?',
+                        })}
+                      </p>
+                    ) : (
+                      <p className="font-mono text-xs text-destructive">
+                        {t('settings.llmConfiguration.workbuddyStatusUnavailable')}
+                        {workbuddyStatus.distribution.message
+                          ? ` — ${workbuddyStatus.distribution.message}`
+                          : ''}
+                      </p>
+                    ))}
+
+                  {workbuddyStatus?.distribution.available && (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={workbuddyRestarting}
+                        onClick={() => void handleRestartWorkBuddy(false)}
+                      >
+                        {t('settings.llmConfiguration.workbuddyRestart')}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={workbuddyRestarting}
+                        onClick={() => void handleRestartWorkBuddy(true)}
+                      >
+                        {t('settings.llmConfiguration.workbuddyRescan')}
+                      </Button>
+                      <span className="font-mono text-xs text-steel-grey">
+                        {workbuddyStatus.runtime.gateway_running
+                          ? t('settings.llmConfiguration.workbuddyRunning', {
+                              model: workbuddyStatus.runtime.model || '-',
+                            })
+                          : t('settings.llmConfiguration.workbuddyIdle')}
+                      </span>
+                    </div>
+                  )}
+
+                  {workbuddyRestartNote && (
+                    <p className="font-mono text-xs text-success">{workbuddyRestartNote}</p>
+                  )}
+
+                  <p className="font-mono text-xs text-steel-grey">
+                    {t('settings.llmConfiguration.workbuddyModelHint')}
+                  </p>
+
+                  <p className="font-mono text-xs text-amber-600">
+                    {t('settings.llmConfiguration.workbuddyShutdownHint')}
+                  </p>
+                </div>
+              )}
+
+              {!backendManaged && (
+                <div className="space-y-2">
+                  <Label htmlFor="apiKey">
+                    {t('settings.llmConfiguration.apiKeyLabel')}{' '}
+                    {!requiresApiKey && (
+                      <span className="text-steel-grey">
+                        {t('settings.llmConfiguration.apiKeyOptional')}
+                      </span>
+                    )}
+                  </Label>
+                  <Input
+                    id="apiKey"
+                    type="password"
+                    value={apiKey}
+                    onChange={(e) => setApiKey(e.target.value)}
+                    placeholder={
+                      requiresApiKey
+                        ? t('settings.llmConfiguration.apiKeyPlaceholder')
+                        : t('settings.llmConfiguration.apiKeyOptionalPlaceholder')
+                    }
+                    className="font-mono"
+                  />
+                  {hasStoredApiKey && !apiKey && (
+                    <p className="text-xs text-steel-grey font-mono">
+                      {t('settings.llmConfiguration.leaveBlankToKeepExistingKey')}
+                    </p>
+                  )}
+                </div>
+              )}
 
               {/* Saved per-provider keys — each provider keeps its own encrypted
                   key, so switching providers never wipes another's. */}
@@ -1010,43 +1167,55 @@ export default function SettingsPage() {
                 </div>
               )}
 
-              {/* API Base URL (optional, for proxies/aggregators/custom endpoints) */}
-              <div className="space-y-2">
-                <Label htmlFor="apiBase">
-                  {baseUrlLabel} {requiresApiBase && <span className="text-destructive">*</span>}
-                </Label>
-                <Input
-                  id="apiBase"
-                  value={apiBase}
-                  onChange={(e) => setApiBase(e.target.value)}
-                  placeholder={baseUrlPlaceholder}
-                  className="font-mono"
-                />
-                <p className="text-xs text-steel-grey font-mono">{baseUrlDescription}</p>
-              </div>
+              {/* API Base URL (optional, for proxies/aggregators/custom
+                  endpoints). Hidden for backend-managed providers: the backend
+                  picks the endpoint itself, so a value here could only
+                  mislead. */}
+              {!backendManaged && (
+                <div className="space-y-2">
+                  <Label htmlFor="apiBase">
+                    {baseUrlLabel} {requiresApiBase && <span className="text-destructive">*</span>}
+                  </Label>
+                  <Input
+                    id="apiBase"
+                    value={apiBase}
+                    onChange={(e) => setApiBase(e.target.value)}
+                    placeholder={baseUrlPlaceholder}
+                    className="font-mono"
+                  />
+                  <p className="text-xs text-steel-grey font-mono">{baseUrlDescription}</p>
+                </div>
+              )}
 
-              {/* Reasoning Effort (optional, only applies to reasoning-capable models) */}
-              <div className="space-y-2">
-                <Dropdown
-                  label={t('settings.llmConfiguration.reasoningEffortLabel')}
-                  value={reasoningEffort}
-                  onChange={(value) => setReasoningEffort(value as ReasoningEffort | 'auto')}
-                  options={[
-                    {
-                      id: 'auto',
-                      label: t('settings.llmConfiguration.reasoningEffortAuto'),
-                      description: t('settings.llmConfiguration.reasoningEffortAutoDesc'),
-                    },
-                    { id: 'minimal', label: t('settings.llmConfiguration.reasoningEffortMinimal') },
-                    { id: 'low', label: t('settings.llmConfiguration.reasoningEffortLow') },
-                    { id: 'medium', label: t('settings.llmConfiguration.reasoningEffortMedium') },
-                    { id: 'high', label: t('settings.llmConfiguration.reasoningEffortHigh') },
-                  ]}
-                />
-                <p className="text-xs text-steel-grey font-mono">
-                  {t('settings.llmConfiguration.reasoningEffortDescription')}
-                </p>
-              </div>
+              {/* Reasoning Effort (optional, only applies to reasoning-capable
+                  models). The WorkBuddy gateway owns sampling params, so the
+                  selector would be a control that does nothing. */}
+              {!backendManaged && (
+                <div className="space-y-2">
+                  <Dropdown
+                    label={t('settings.llmConfiguration.reasoningEffortLabel')}
+                    value={reasoningEffort}
+                    onChange={(value) => setReasoningEffort(value as ReasoningEffort | 'auto')}
+                    options={[
+                      {
+                        id: 'auto',
+                        label: t('settings.llmConfiguration.reasoningEffortAuto'),
+                        description: t('settings.llmConfiguration.reasoningEffortAutoDesc'),
+                      },
+                      {
+                        id: 'minimal',
+                        label: t('settings.llmConfiguration.reasoningEffortMinimal'),
+                      },
+                      { id: 'low', label: t('settings.llmConfiguration.reasoningEffortLow') },
+                      { id: 'medium', label: t('settings.llmConfiguration.reasoningEffortMedium') },
+                      { id: 'high', label: t('settings.llmConfiguration.reasoningEffortHigh') },
+                    ]}
+                  />
+                  <p className="text-xs text-steel-grey font-mono">
+                    {t('settings.llmConfiguration.reasoningEffortDescription')}
+                  </p>
+                </div>
+              )}
 
               {/* Action Buttons */}
               <div className="flex gap-4">

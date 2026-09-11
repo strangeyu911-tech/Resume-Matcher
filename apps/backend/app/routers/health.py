@@ -5,7 +5,7 @@ import logging
 from fastapi import APIRouter
 
 from app.database import db
-from app.llm import check_llm_health, get_llm_config
+from app.llm import PROVIDERS_WITHOUT_API_KEY, check_llm_health, get_llm_config
 from app.schemas import HealthResponse, StatusResponse
 
 logger = logging.getLogger(__name__)
@@ -43,9 +43,12 @@ async def get_status() -> StatusResponse:
     llm_healthy = False
     try:
         config = get_llm_config()
-        # ollama / openai_compatible run without a key, matching check_llm_health.
-        llm_configured = bool(config.api_key) or config.provider in ("ollama", "openai_compatible")
-        llm_status = await check_llm_health(config)
+        # Providers in PROVIDERS_WITHOUT_API_KEY (ollama / openai_compatible /
+        # workbuddy) are usable with no key, matching check_llm_health.
+        llm_configured = bool(config.api_key) or config.provider in PROVIDERS_WITHOUT_API_KEY
+        # light=True: this endpoint is polled by the UI, and a full probe would
+        # start the WorkBuddy app-server as a side effect of a GET.
+        llm_status = await check_llm_health(config, light=True)
         llm_healthy = bool(llm_status.get("healthy"))
     except Exception:
         logger.exception("Status: LLM health check failed")

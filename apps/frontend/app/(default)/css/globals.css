@@ -77,6 +77,16 @@
 }
 
 :root {
+  /* next/font fallbacks (offline / GFW-safe): system font stacks instead of
+     Google Fonts. Defined here so every var(--font-*) reference resolves
+     without fetching fonts.gstatic.com. If you have access to Google Fonts,
+     revert app/layout.tsx to the original next/font/google imports. */
+  --font-geist: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  --font-space-grotesk: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-noto-sans-sc: 'PingFang SC', 'Microsoft YaHei', 'Hiragino Sans GB', 'Source Han Sans SC', 'Noto Sans CJK SC', sans-serif;
+  --font-noto-sans-jp: 'Hiragino Sans', 'Yu Gothic', 'Meiryo', 'Noto Sans CJK JP', sans-serif;
+  --font-noto-sans-kr: 'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans CJK KR', sans-serif;
+
   --font-mono: 'Geist Mono', monospace;
   --font-sans: 'Geist', sans-serif;
 

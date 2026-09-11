@@ -22,6 +22,12 @@ describe('llmProviderToKeyProvider', () => {
     expect(llmProviderToKeyProvider('openai_compatible')).toBe('openai_compatible');
     expect(llmProviderToKeyProvider('ollama')).toBe('ollama');
   });
+
+  it('returns null for providers that have no key slot', () => {
+    // workbuddy authenticates against the local WorkBuddy login and never
+    // transmits an API key, so it must not resolve to a storable slot.
+    expect(llmProviderToKeyProvider('workbuddy')).toBeNull();
+  });
 });
 
 describe('tracker API client', () => {

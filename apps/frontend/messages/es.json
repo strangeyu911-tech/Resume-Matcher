@@ -679,6 +679,15 @@
       "selectedProvider": "SELECCIONADO: {provider}",
       "modelLabel": "Modelo",
       "defaultModel": "PREDETERMINADO: {model}",
+      "workbuddyNotice": "No se necesita clave de API: se ejecuta con tu cuenta local de WorkBuddy",
+      "workbuddyStatusReady": "Se detectó WorkBuddy CLI {version}.",
+      "workbuddyStatusUnavailable": "No se encontró WorkBuddy en este equipo.",
+      "workbuddyRestart": "Reiniciar app-server",
+      "workbuddyRescan": "Volver a buscar la instalación",
+      "workbuddyRunning": "app-server en ejecución ({model})",
+      "workbuddyIdle": "app-server inactivo (se inicia en el primer uso)",
+      "workbuddyRestartDone": "app-server detenido. Se reiniciará en la próxima solicitud.",
+      "workbuddyModelHint": "Los ID de modelo provienen de tu WorkBuddy CLI local. Elige uno de la lista o escribe un ID compatible. El guardado surte efecto automáticamente: el proceso local se reinicia con el nuevo modelo.",
       "apiKeyLabel": "Clave API",
       "apiKeyOptionalForOllama": "(Opcional para Ollama)",
       "apiKeyOptional": "(Opcional)",
@@ -715,11 +724,20 @@
         "health_check_failed": "La verificación falló.",
         "duplicate_v1_path": "La verificación falló. La URL base puede contener un /v1 duplicado.",
         "not_found_404": "La verificación falló. 404 No encontrado: comprueba que la URL base coincide con el proveedor.",
-        "html_response": "La verificación falló. La URL base devolvió HTML; puede ser la URL de consola o una ruta de puerta de enlace no compatible."
+        "html_response": "La verificación falló. La URL base devolvió HTML; puede ser la URL de consola o una ruta de puerta de enlace no compatible.",
+        "CODEBUDDY_BINARY_NOT_FOUND": "No se encontró el CLI de WorkBuddy. Instala WorkBuddy e inicia sesión, o define WORKBUDDY_CLI_PATH.",
+        "CODEBUDDY_RUNTIME_NOT_FOUND": "No se encontró un runtime de Node.js para iniciar el app-server de WorkBuddy. Define WORKBUDDY_NODE_PATH con Node 18+.",
+        "CODEBUDDY_LOGIN_REQUIRED": "WorkBuddy rechazó las credenciales del app-server. Abre WorkBuddy, inicia sesión y vuelve a probar.",
+        "CODEBUDDY_API_INCOMPATIBLE": "El CLI de WorkBuddy instalado no puede alojar el app-server. Actualiza WorkBuddy e inténtalo de nuevo.",
+        "CODEBUDDY_SESSION_FAILED": "No se pudo iniciar el app-server de WorkBuddy. Comprueba que WorkBuddy esté instalado y con sesión iniciada.",
+        "CODEBUDDY_TURN_FAILED": "El app-server de WorkBuddy no completó la solicitud. Inténtalo de nuevo o reinicia el app-server.",
+        "CODEBUDDY_MODEL_UNAVAILABLE": "WorkBuddy no puede usar este modelo ahora mismo. Elige otro de la lista."
       },
       "healthWarnings": {
-        "empty_content": "El LLM devolvió contenido vacío en la verificación de salud."
-      }
+        "empty_content": "El LLM devolvió contenido vacío en la verificación de salud.",
+        "workbuddy_unverified": "WorkBuddy está instalado pero aún no se ha verificado. Usa Probar conexión para confirmar la cuenta y el modelo."
+      },
+      "workbuddyShutdownHint": "Nota: detén el backend cerrando su ventana de consola; un apagado ordenado recupera automáticamente el proceso del modelo de WorkBuddy. Si lo fuerzas desde el Administrador de tareas, el proceso quedará en segundo plano."
     },
     "contentGeneration": {
       "title": "Generación de contenido",

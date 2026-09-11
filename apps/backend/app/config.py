@@ -216,11 +216,27 @@ class Settings(BaseSettings):
         "deepseek",
         "groq",
         "ollama",
+        "workbuddy",
     ] = "openai"
     llm_model: str = "gpt-5-nano-2025-08-07"
     llm_api_key: str = ""
     llm_api_base: str | None = None  # For Ollama or custom endpoints
     log_llm: Literal["CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG"] = "WARNING"
+
+    # ------------------------------------------------------------------ #
+    # WorkBuddy app-server provider (no third-party API key required)
+    # ------------------------------------------------------------------ #
+    # Resume-Matcher can run against the WorkBuddy / CodeBuddy app-server
+    # (`codebuddy --serve`) that ships inside the local WorkBuddy install and
+    # spend the signed-in account's model quota. The CLI and Node runtime are
+    # discovered automatically; these knobs exist for non-standard installs.
+    workbuddy_cli_path: str = ""  # e.g. ...\WorkBuddy\resources\app.asar.unpacked\cli\bin\codebuddy
+    workbuddy_node_path: str = ""  # e.g. ...\.workbuddy\binaries\node\versions\22.22.2\node.exe
+    # The gateway is started on first use and stopped after this much idle time.
+    workbuddy_idle_seconds: int = 900
+    # Resume parsing is slow through an agent gateway; keep headroom.
+    workbuddy_prompt_timeout_seconds: int = 600
+    workbuddy_startup_timeout_seconds: int = 90
 
     @field_validator("llm_provider", mode="before")
     @classmethod

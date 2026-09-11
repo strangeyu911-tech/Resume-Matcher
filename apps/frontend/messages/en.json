@@ -679,6 +679,15 @@
       "selectedProvider": "SELECTED: {provider}",
       "modelLabel": "Model",
       "defaultModel": "DEFAULT: {model}",
+      "workbuddyNotice": "No API key needed — runs on your local WorkBuddy account",
+      "workbuddyStatusReady": "WorkBuddy CLI {version} detected.",
+      "workbuddyStatusUnavailable": "WorkBuddy was not found on this machine.",
+      "workbuddyRestart": "Restart app-server",
+      "workbuddyRescan": "Rescan install",
+      "workbuddyRunning": "App-server running ({model})",
+      "workbuddyIdle": "App-server idle (starts on first use)",
+      "workbuddyRestartDone": "App-server stopped. It will start again on the next request.",
+      "workbuddyModelHint": "Model ids come from your local WorkBuddy CLI. Pick one from the list, or type an id your build supports. Saving takes effect automatically — the local process restarts with the new model.",
       "apiKeyLabel": "API Key",
       "apiKeyOptionalForOllama": "(Optional for Ollama)",
       "apiKeyOptional": "(Optional)",
@@ -715,11 +724,20 @@
         "health_check_failed": "Health check failed.",
         "duplicate_v1_path": "Health check failed. The Base URL may contain a duplicate /v1 path.",
         "not_found_404": "Health check failed. 404 Not Found - check that the Base URL matches the provider.",
-        "html_response": "Health check failed. The Base URL returned HTML; it may be a console URL or an unsupported gateway path."
+        "html_response": "Health check failed. The Base URL returned HTML; it may be a console URL or an unsupported gateway path.",
+        "CODEBUDDY_BINARY_NOT_FOUND": "The WorkBuddy CLI was not found. Install WorkBuddy and sign in, or set WORKBUDDY_CLI_PATH.",
+        "CODEBUDDY_RUNTIME_NOT_FOUND": "No Node.js runtime was found to launch the WorkBuddy app-server. Set WORKBUDDY_NODE_PATH to a Node 18+ executable.",
+        "CODEBUDDY_LOGIN_REQUIRED": "WorkBuddy rejected the app-server credentials. Open WorkBuddy, sign in, and test again.",
+        "CODEBUDDY_API_INCOMPATIBLE": "The installed WorkBuddy CLI cannot host the app-server. Update WorkBuddy and try again.",
+        "CODEBUDDY_SESSION_FAILED": "The WorkBuddy app-server could not be started. Check that WorkBuddy is installed and signed in.",
+        "CODEBUDDY_TURN_FAILED": "The WorkBuddy app-server did not complete the request. Try again, or restart the app-server.",
+        "CODEBUDDY_MODEL_UNAVAILABLE": "WorkBuddy cannot use this model right now. Pick another model from the list."
       },
       "healthWarnings": {
-        "empty_content": "LLM returned empty content for the health check."
-      }
+        "empty_content": "LLM returned empty content for the health check.",
+        "workbuddy_unverified": "WorkBuddy is installed but has not been verified yet. Use Test Connection to confirm the account and model."
+      },
+      "workbuddyShutdownHint": "Note: stop the backend by closing its console window — a graceful shutdown automatically reclaims the WorkBuddy model process. Force-killing the backend in Task Manager leaves that process running in the background."
     },
     "contentGeneration": {
       "title": "Content Generation",

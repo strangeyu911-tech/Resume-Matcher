@@ -254,6 +254,52 @@ async def test_llm_connection(request: LLMConfigRequest | None = None) -> dict:
     return await check_llm_health(config, include_details=True, test_prompt=test_prompt)
 
 
+@router.get("/workbuddy")
+async def get_workbuddy_status() -> dict:
+    """WorkBuddy app-server provider: discovered runtime, models, and state.
+
+    Backs the Settings panel for the no-API-key provider. Deliberately does NOT
+    start the app-server — it reports discovery results and whatever process is
+    already alive. Use ``/config/llm-test`` for an end-to-end round-trip.
+    """
+    from app import workbuddy
+
+    return {
+        "models": workbuddy.available_models(),
+        "default_model": workbuddy.DEFAULT_MODEL,
+        "distribution": workbuddy.distribution_status(),
+        "runtime": workbuddy.app_server.status(),
+        # Lets the UI explain the trade-off without hardcoding it.
+        "requirements": {
+            "api_key": False,
+            "base_url": False,
+            "workbuddy_login": True,
+        },
+    }
+
+
+@router.post("/workbuddy/restart")
+async def restart_workbuddy_app_server(refresh_discovery: bool = False) -> dict:
+    """Stop the app-server so the next request starts a fresh one.
+
+    Recovery action for a wedged gateway. ``refresh_discovery=true`` also drops
+    the cached CLI lookup, which is what you want after installing, upgrading,
+    or repairing WorkBuddy without restarting the backend.
+    """
+    from app import workbuddy
+
+    stopped = workbuddy.app_server.status()
+    await workbuddy.app_server.reset()
+    if refresh_discovery:
+        workbuddy.reset_discovery_cache()
+
+    return {
+        "message": "WorkBuddy app-server stopped; the next request will start a new one.",
+        "previous": stopped,
+        "distribution": workbuddy.distribution_status(),
+    }
+
+
 @router.get("/features", response_model=FeatureConfigResponse)
 async def get_feature_config() -> FeatureConfigResponse:
     """Get current feature configuration."""

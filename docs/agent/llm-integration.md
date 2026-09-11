@@ -15,6 +15,27 @@ Backend uses LiteLLM to support multiple providers through a unified API:
 | **Google Gemini** | Cloud | Gemini 3 Flash |
 | **OpenRouter** | Cloud | Access to multiple models |
 | **DeepSeek** | Cloud | DeepSeek Chat |
+| **WorkBuddy** | Local app-server | No API key — uses the local WorkBuddy account |
+
+### WorkBuddy (no API key)
+
+`workbuddy` is the one provider that needs neither an API key nor an endpoint. The
+backend discovers the CodeBuddy CLI bundled with the local WorkBuddy install, starts
+`codebuddy --serve` on first use, and speaks ACP (JSON-RPC over an SSE response) to
+it. The gateway is pinned to a single model per process, so changing the model
+restarts it, and it is reaped after `WORKBUDDY_IDLE_SECONDS` of idleness.
+
+No LiteLLM Router is involved: `complete()` / `complete_json()` dispatch straight to
+`app/workbuddy.py`, which owns discovery, process lifecycle, ACP transport, and
+retries. `check_llm_health(..., light=True)` reports from cached discovery without
+starting a process — that is what `GET /status` uses, so a polled status read never
+boots a gateway.
+
+Prerequisites: WorkBuddy installed **and signed in** on the same machine.
+
+- Status: `GET /config/workbuddy`
+- Restart / re-scan: `POST /config/workbuddy/restart?refresh_discovery=true`
+- Overrides for non-standard installs: `WORKBUDDY_CLI_PATH`, `WORKBUDDY_NODE_PATH`
 
 ## API Key Handling
 

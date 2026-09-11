@@ -679,6 +679,15 @@
       "selectedProvider": "選択中: {provider}",
       "modelLabel": "モデル",
       "defaultModel": "既定: {model}",
+      "workbuddyNotice": "APIキー不要 —— ローカルの WorkBuddy アカウント枠で実行します",
+      "workbuddyStatusReady": "WorkBuddy CLI {version} を検出しました。",
+      "workbuddyStatusUnavailable": "このマシンに WorkBuddy が見つかりません。",
+      "workbuddyRestart": "app-server を再起動",
+      "workbuddyRescan": "インストールを再スキャン",
+      "workbuddyRunning": "app-server 実行中（{model}）",
+      "workbuddyIdle": "app-server 待機中（初回利用時に起動）",
+      "workbuddyRestartDone": "app-server を停止しました。次回のリクエストで再起動します。",
+      "workbuddyModelHint": "モデル ID はローカルの WorkBuddy CLI 由来です。一覧から選ぶか、対応する ID を入力してください。 保存すると自動的に反映され、ローカル プロセスは新しいモデルで再起動します。",
       "apiKeyLabel": "API キー",
       "apiKeyOptionalForOllama": "（Ollama は任意）",
       "apiKeyOptional": "（任意）",
@@ -715,11 +724,20 @@
         "health_check_failed": "ヘルスチェックに失敗しました。",
         "duplicate_v1_path": "ヘルスチェックに失敗しました。Base URL に /v1 が重複している可能性があります。",
         "not_found_404": "ヘルスチェックに失敗しました。404 Not Found。Base URL が提供元と一致しているか確認してください。",
-        "html_response": "ヘルスチェックに失敗しました。Base URL が HTML を返しました。コンソールURLや未対応のゲートウェイの可能性があります。"
+        "html_response": "ヘルスチェックに失敗しました。Base URL が HTML を返しました。コンソールURLや未対応のゲートウェイの可能性があります。",
+        "CODEBUDDY_BINARY_NOT_FOUND": "WorkBuddy CLI が見つかりません。WorkBuddy をインストールしてサインインするか、WORKBUDDY_CLI_PATH を設定してください。",
+        "CODEBUDDY_RUNTIME_NOT_FOUND": "WorkBuddy app-server を起動する Node.js ランタイムが見つかりません。WORKBUDDY_NODE_PATH に Node 18+ を指定してください。",
+        "CODEBUDDY_LOGIN_REQUIRED": "WorkBuddy が app-server の認証情報を拒否しました。WorkBuddy にサインインして再テストしてください。",
+        "CODEBUDDY_API_INCOMPATIBLE": "インストールされている WorkBuddy CLI は app-server を提供できません。WorkBuddy を更新してください。",
+        "CODEBUDDY_SESSION_FAILED": "WorkBuddy app-server を起動できませんでした。WorkBuddy がインストール済みでサインイン済みか確認してください。",
+        "CODEBUDDY_TURN_FAILED": "WorkBuddy app-server がリクエストを完了できませんでした。再試行するか、app-server を再起動してください。",
+        "CODEBUDDY_MODEL_UNAVAILABLE": "WorkBuddy は現在このモデルを利用できません。一覧から別のモデルを選んでください。"
       },
       "healthWarnings": {
-        "empty_content": "ヘルスチェックで空の内容が返されました。"
-      }
+        "empty_content": "ヘルスチェックで空の内容が返されました。",
+        "workbuddy_unverified": "WorkBuddy はインストール済みですが未検証です。「接続テスト」でアカウントとモデルを確認してください。"
+      },
+      "workbuddyShutdownHint": "ヒント：バックエンドはコンソール ウィンドウを閉じて停止してください。正常終了すれば WorkBuddy のモデル プロセスは自動的に回収されます。タスク マネージャーで強制終了すると、プロセスがバックグラウンドに残ります。"
     },
     "contentGeneration": {
       "title": "コンテンツ生成",

@@ -65,6 +65,16 @@ async def lifespan(app: FastAPI):
         logger.error(f"Error closing PDF renderer: {e}")
 
     try:
+        # Stop the WorkBuddy app-server child process if the backend started
+        # one, so shutting down the backend never leaves an orphaned gateway
+        # holding a port and a logged-in session.
+        from app.workbuddy import app_server
+
+        await app_server.aclose()
+    except Exception as e:
+        logger.error(f"Error stopping WorkBuddy app-server: {e}")
+
+    try:
         await db.close()
     except Exception as e:
         logger.error(f"Error closing database: {e}")

@@ -679,6 +679,15 @@
       "selectedProvider": "SÉLECTIONNÉ : {provider}",
       "modelLabel": "Modèle",
       "defaultModel": "PAR DÉFAUT : {model}",
+      "workbuddyNotice": "Aucune clé API requise — utilise le quota de votre compte WorkBuddy local",
+      "workbuddyStatusReady": "WorkBuddy CLI {version} détecté.",
+      "workbuddyStatusUnavailable": "WorkBuddy est introuvable sur cette machine.",
+      "workbuddyRestart": "Redémarrer l'app-server",
+      "workbuddyRescan": "Réanalyser l'installation",
+      "workbuddyRunning": "app-server en cours d'exécution ({model})",
+      "workbuddyIdle": "app-server inactif (démarre à la première utilisation)",
+      "workbuddyRestartDone": "app-server arrêté. Il redémarrera à la prochaine requête.",
+      "workbuddyModelHint": "Les ID de modèle proviennent de votre WorkBuddy CLI local. Choisissez-en un dans la liste ou saisissez un ID pris en charge. L'enregistrement prend effet automatiquement : le processus local redémarre avec le nouveau modèle.",
       "apiKeyLabel": "Clé API",
       "apiKeyOptionalForOllama": "(Optionnelle pour Ollama)",
       "apiKeyOptional": "(Optionnelle)",
@@ -715,11 +724,20 @@
         "health_check_failed": "Échec de la vérification de l'état.",
         "duplicate_v1_path": "Échec de la vérification de l'état. L'URL de base peut contenir un chemin /v1 en double.",
         "not_found_404": "Échec de la vérification de l'état. 404 Non trouvé - vérifiez que l'URL de base correspond au fournisseur.",
-        "html_response": "Échec de la vérification de l'état. L'URL de base a retourné du HTML ; il peut s'agir d'une URL de console ou d'un chemin de passerelle non pris en charge."
+        "html_response": "Échec de la vérification de l'état. L'URL de base a retourné du HTML ; il peut s'agir d'une URL de console ou d'un chemin de passerelle non pris en charge.",
+        "CODEBUDDY_BINARY_NOT_FOUND": "Le CLI WorkBuddy est introuvable. Installez WorkBuddy et connectez-vous, ou définissez WORKBUDDY_CLI_PATH.",
+        "CODEBUDDY_RUNTIME_NOT_FOUND": "Aucun runtime Node.js n'a été trouvé pour lancer l'app-server WorkBuddy. Définissez WORKBUDDY_NODE_PATH sur Node 18+.",
+        "CODEBUDDY_LOGIN_REQUIRED": "WorkBuddy a refusé les identifiants de l'app-server. Ouvrez WorkBuddy, connectez-vous, puis réessayez.",
+        "CODEBUDDY_API_INCOMPATIBLE": "Le CLI WorkBuddy installé ne peut pas héberger l'app-server. Mettez WorkBuddy à jour et réessayez.",
+        "CODEBUDDY_SESSION_FAILED": "L'app-server WorkBuddy n'a pas pu démarrer. Vérifiez que WorkBuddy est installé et connecté.",
+        "CODEBUDDY_TURN_FAILED": "L'app-server WorkBuddy n'a pas terminé la requête. Réessayez ou redémarrez l'app-server.",
+        "CODEBUDDY_MODEL_UNAVAILABLE": "WorkBuddy ne peut pas utiliser ce modèle pour le moment. Choisissez-en un autre dans la liste."
       },
       "healthWarnings": {
-        "empty_content": "Le LLM a retourné un contenu vide lors de la vérification de l'état."
-      }
+        "empty_content": "Le LLM a retourné un contenu vide lors de la vérification de l'état.",
+        "workbuddy_unverified": "WorkBuddy est installé mais n'a pas encore été vérifié. Utilisez Tester la connexion pour valider le compte et le modèle."
+      },
+      "workbuddyShutdownHint": "Remarque : arrêtez le backend en fermant sa fenêtre de console — un arrêt propre récupère automatiquement le processus de modèle WorkBuddy. Un arrêt forcé via le Gestionnaire des tâches laisserait ce processus tourner en arrière-plan."
     },
     "contentGeneration": {
       "title": "Génération de contenu",

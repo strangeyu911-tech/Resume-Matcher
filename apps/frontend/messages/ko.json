@@ -679,6 +679,15 @@
       "selectedProvider": "선택됨: {provider}",
       "modelLabel": "모델",
       "defaultModel": "기본값: {model}",
+      "workbuddyNotice": "API 키 불필요 — 로컬 WorkBuddy 계정 할당량으로 실행됩니다",
+      "workbuddyStatusReady": "WorkBuddy CLI {version} 감지됨.",
+      "workbuddyStatusUnavailable": "이 컴퓨터에서 WorkBuddy를 찾을 수 없습니다.",
+      "workbuddyRestart": "app-server 재시작",
+      "workbuddyRescan": "설치 다시 검색",
+      "workbuddyRunning": "app-server 실행 중 ({model})",
+      "workbuddyIdle": "app-server 유휴 (첫 사용 시 시작)",
+      "workbuddyRestartDone": "app-server를 중지했습니다. 다음 요청에서 다시 시작됩니다.",
+      "workbuddyModelHint": "모델 ID는 로컬 WorkBuddy CLI에서 가져옵니다. 목록에서 선택하거나 지원되는 ID를 입력하세요. 저장하면 자동으로 적용되며, 로컬 프로세스가 새 모델로 다시 시작됩니다.",
       "apiKeyLabel": "API 키",
       "apiKeyOptionalForOllama": "(Ollama에서는 선택 사항)",
       "apiKeyOptional": "(선택 사항)",
@@ -715,11 +724,20 @@
         "health_check_failed": "상태 확인에 실패했습니다.",
         "duplicate_v1_path": "상태 확인에 실패했습니다. 기본 URL에 /v1 경로가 중복되어 있을 수 있습니다.",
         "not_found_404": "상태 확인에 실패했습니다. 404 Not Found - 기본 URL이 제공업체와 일치하는지 확인하세요.",
-        "html_response": "상태 확인에 실패했습니다. 기본 URL이 HTML을 반환했습니다. 콘솔 URL이거나 지원되지 않는 게이트웨이 경로일 수 있습니다."
+        "html_response": "상태 확인에 실패했습니다. 기본 URL이 HTML을 반환했습니다. 콘솔 URL이거나 지원되지 않는 게이트웨이 경로일 수 있습니다.",
+        "CODEBUDDY_BINARY_NOT_FOUND": "WorkBuddy CLI를 찾을 수 없습니다. WorkBuddy를 설치하고 로그인하거나 WORKBUDDY_CLI_PATH를 설정하세요.",
+        "CODEBUDDY_RUNTIME_NOT_FOUND": "WorkBuddy app-server를 실행할 Node.js 런타임을 찾을 수 없습니다. WORKBUDDY_NODE_PATH를 Node 18+로 설정하세요.",
+        "CODEBUDDY_LOGIN_REQUIRED": "WorkBuddy가 app-server 자격 증명을 거부했습니다. WorkBuddy에서 로그인한 뒤 다시 테스트하세요.",
+        "CODEBUDDY_API_INCOMPATIBLE": "설치된 WorkBuddy CLI는 app-server를 호스팅할 수 없습니다. WorkBuddy를 업데이트하세요.",
+        "CODEBUDDY_SESSION_FAILED": "WorkBuddy app-server를 시작하지 못했습니다. WorkBuddy가 설치되고 로그인되어 있는지 확인하세요.",
+        "CODEBUDDY_TURN_FAILED": "WorkBuddy app-server가 요청을 완료하지 못했습니다. 다시 시도하거나 app-server를 재시작하세요.",
+        "CODEBUDDY_MODEL_UNAVAILABLE": "WorkBuddy에서 지금은 이 모델을 사용할 수 없습니다. 목록에서 다른 모델을 선택하세요."
       },
       "healthWarnings": {
-        "empty_content": "상태 확인 시 LLM이 빈 응답을 반환했습니다."
-      }
+        "empty_content": "상태 확인 시 LLM이 빈 응답을 반환했습니다.",
+        "workbuddy_unverified": "WorkBuddy가 설치되어 있지만 아직 확인되지 않았습니다. '연결 테스트'로 계정과 모델을 확인하세요."
+      },
+      "workbuddyShutdownHint": "참고: 백엔드는 콘솔 창을 닫아 중지하세요. 정상 종료 시 WorkBuddy 모델 프로세스가 자동으로 정리됩니다. 작업 관리자에서 강제 종료하면 프로세스가 백그라운드에 남습니다."
     },
     "contentGeneration": {
       "title": "콘텐츠 생성",

@@ -18,6 +18,7 @@ Stack: FastAPI 0.128 · Python **3.13+** · Pydantic v2 / pydantic-settings · S
 | Database | Async SQLAlchemy/SQLite facade; tables `resumes`/`jobs`/`improvements`/`applications`/`api_keys`; returns plain dicts; global `db` singleton | `app/database.py`, `app/models.py`, `app/db_engine.py` |
 | Tracker | Kanban application-tracker endpoints | `app/routers/applications.py`, `app/schemas/applications.py` |
 | LLM | LiteLLM wrapper: Router, retries, JSON extraction, timeouts, provider quirks | `app/llm.py` |
+| LLM (local, no key) | WorkBuddy app-server provider: CLI discovery, `codebuddy --serve` lifecycle, ACP transport | `app/workbuddy.py` |
 | PDF | Headless Chromium render of frontend `/print/*` pages; lazy browser init | `app/pdf.py` |
 | Routers | HTTP endpoints (see below) | `app/routers/*.py` |
 | Services | Business logic (parse, improve/diff, refine, cover-letter) | `app/services/*.py` |
@@ -28,7 +29,7 @@ Stack: FastAPI 0.128 · Python **3.13+** · Pydantic v2 / pydantic-settings · S
 
 ### Routers (all prefixed `/api/v1`)
 - `health.py` — `GET /health` (liveness, no LLM call), `GET /status` (LLM health + DB stats).
-- `config.py` — `/config/llm-api-key` (GET/PUT), `/config/llm-test` (POST live health check), `/config/features`, `/config/language`, `/config/prompts`, `/config/feature-prompts`, `/config/api-keys` (per-provider CRUD), `/config/reset` (POST; confirmation token `{"confirm": "RESET_ALL_DATA"}` in the JSON **body**, not a query param).
+- `config.py` — `/config/llm-api-key` (GET/PUT), `/config/llm-test` (POST live health check), `/config/features`, `/config/language`, `/config/prompts`, `/config/feature-prompts`, `/config/api-keys` (per-provider CRUD), `/config/workbuddy` (GET status/models), `/config/workbuddy/restart` (POST), `/config/reset` (POST; confirmation token `{"confirm": "RESET_ALL_DATA"}` in the JSON **body**, not a query param).
 - `resumes.py` — the biggest router: `/resumes/upload`, `GET /resumes`, `/resumes/list`, `/resumes/improve` + `/improve/preview` + `/improve/confirm`, `PATCH /resumes/{id}`, `/{id}/pdf`, `/{id}/retry-processing`, cover-letter/outreach/title PATCH + on-demand generate, `/{id}/job-description`, `/{id}/cover-letter/pdf`.
 - `jobs.py` — `/jobs/upload` (batch JD text → job_ids), `GET /jobs/{id}`.
 - `enrichment.py` — `/enrichment/analyze/{id}`, `/enhance`, `/apply/{id}`, `/regenerate`, `/apply-regenerated/{id}`.
@@ -78,13 +79,14 @@ Prompts are **plain Python string constants** — no Jinja, no external prompt f
 
 ## LLM Integration (`app/llm.py`)
 
-- **Provider abstraction:** LiteLLM. Providers: `openai`, `openai_compatible` (llama.cpp/vLLM/LM Studio), `anthropic`, `openrouter`, `gemini`, `deepseek`, `groq`, `ollama`. `get_model_name()` maps provider→LiteLLM prefix; `_normalize_api_base()` fixes `/v1/v1` duplication per provider.
+- **Provider abstraction:** LiteLLM. Providers: `openai`, `openai_compatible` (llama.cpp/vLLM/LM Studio), `anthropic`, `openrouter`, `gemini`, `deepseek`, `groq`, `ollama`, `workbuddy`. `get_model_name()` maps provider→LiteLLM prefix; `_normalize_api_base()` fixes `/v1/v1` duplication per provider.
+- **`workbuddy` bypasses LiteLLM entirely:** `complete()`/`complete_json()`/`check_llm_health()` dispatch to `app/workbuddy.py`, which discovers the local WorkBuddy CLI, starts `codebuddy --serve` on demand, and talks ACP to it. No Router, no `api_key`, no `api_base`. `get_model_name()` returns the bare model id; the capability helpers recognise these ids so they aren't clamped to the unknown-model fallbacks.
 - **Router:** a cached `litellm.Router` (`get_router`) rebuilt only when a config fingerprint changes. `num_retries=3` with a `RetryPolicy` (auth/bad-request/content-policy = 0 retries; timeout/500 = 2; rate-limit = 3). Cooldowns disabled (single deployment). **Transport retries live in the Router; do not re-retry them in callers.**
 - **`complete()` / `complete_json()`:** `complete_json` adds app-level *content-quality* retries (malformed JSON, truncation) with temperature escalation and a JSON-mode→prompt-only fallback. JSON is parsed by the brace-balancing `_extract_json`; `_appears_truncated` is `schema_type`-aware (`resume`/`enrichment`/`diff`/`keywords`).
 - **Capabilities via registry, not hardcoded:** `_supports_json_mode`, `_supports_temperature`, `get_safe_max_tokens` query `litellm.get_model_info` (with Ollama/local fallbacks). `litellm.drop_params = True` lets unsupported params (e.g. `reasoning_effort`) be dropped silently.
 - **Timeouts:** adaptive (`_calculate_timeout`): base 30s health / 120s completion / 180s JSON, scaled by token count and a provider factor (ollama 2x, openrouter 1.5x...).
 - **Reasoning models:** `<think>` tags stripped; `reasoning_content`/`thinking` used as content fallback. gpt-5 configs auto-migrate to `reasoning_effort="minimal"` once.
-- **Key resolution:** single source of truth is `resolve_api_key(stored, provider)`. `openai_compatible`/`ollama` deliberately **skip** the env-level `LLM_API_KEY` fallback so a paid key can't leak to a local server. Error text is scrubbed of key-like tokens (`_scrub_secrets`) before reaching clients.
+- **Key resolution:** single source of truth is `resolve_api_key(stored, provider)`. `PROVIDERS_WITHOUT_API_KEY` (`openai_compatible`/`ollama`/`workbuddy`) deliberately **skip** the env-level `LLM_API_KEY` fallback so a paid key can't leak to a local server (and so `workbuddy`, which authenticates via the local WorkBuddy login, can never be handed one). The same set backs the "is a key required?" check in `check_llm_health` and `GET /status`, so those two answers cannot drift apart. Error text is scrubbed of key-like tokens (`_scrub_secrets`) before reaching clients.
 - API keys are passed directly to LiteLLM calls (never via `os.environ`) to avoid async races.
 
 ---

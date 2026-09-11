@@ -10,7 +10,8 @@ export type LLMProvider =
   | 'gemini'
   | 'deepseek'
   | 'groq'
-  | 'ollama';
+  | 'ollama'
+  | 'workbuddy';
 
 // Reasoning-effort levels supported by LiteLLM. `null` (or absent) means
 // "do not send the parameter" — the default for max compatibility.
@@ -148,6 +149,82 @@ export async function fetchSystemStatus(): Promise<SystemStatus> {
   return res.json();
 }
 
+// WorkBuddy app-server provider: discovered runtime, models, and live state.
+// Backs the Settings panel for the no-API-key provider.
+export interface WorkBuddyDistribution {
+  available: boolean;
+  cli_path?: string;
+  node_path?: string;
+  cli_version?: string;
+  error_code?: string;
+  message?: string;
+  hint?: string;
+}
+
+export interface WorkBuddyRuntime {
+  provider: string;
+  boot_id: string;
+  gateway_running: boolean;
+  gateway_endpoint: string;
+  acp_connected: boolean;
+  model: string;
+  idle_seconds: number;
+  sessions: number;
+  prompts: number;
+  restarts: number;
+  last_error: string;
+}
+
+export interface WorkBuddyStatus {
+  models: string[];
+  default_model: string;
+  distribution: WorkBuddyDistribution;
+  runtime: WorkBuddyRuntime;
+  requirements: {
+    api_key: boolean;
+    base_url: boolean;
+    workbuddy_login: boolean;
+  };
+}
+
+/**
+ * Read the WorkBuddy app-server state.
+ *
+ * Deliberately cheap: the backend answers from CLI discovery plus whatever
+ * process is already running, and never starts a gateway for a read.
+ */
+export async function fetchWorkBuddyStatus(): Promise<WorkBuddyStatus> {
+  const res = await apiFetch('/config/workbuddy', { credentials: 'include' });
+
+  if (!res.ok) {
+    throw new Error(`Failed to load WorkBuddy status (status ${res.status}).`);
+  }
+
+  return res.json();
+}
+
+/**
+ * Stop the app-server so the next request starts a fresh one.
+ *
+ * Recovery action for a wedged gateway. `refreshDiscovery` also drops the
+ * backend's cached CLI lookup — what you want after installing, upgrading, or
+ * repairing WorkBuddy without restarting the backend.
+ */
+export async function restartWorkBuddyAppServer(
+  refreshDiscovery = false
+): Promise<{ message: string; distribution: WorkBuddyDistribution }> {
+  const res = await apiFetch(
+    `/config/workbuddy/restart?refresh_discovery=${refreshDiscovery ? 'true' : 'false'}`,
+    { method: 'POST', credentials: 'include' }
+  );
+
+  if (!res.ok) {
+    throw new Error(`Failed to restart the WorkBuddy app-server (status ${res.status}).`);
+  }
+
+  return res.json();
+}
+
 // Provider display names and default models
 export const PROVIDER_INFO: Record<
   LLMProvider,
@@ -168,6 +245,13 @@ export const PROVIDER_INFO: Record<
      */
     baseUrlI18nKey?: string;
     baseUrlPlaceholder?: string;
+    /**
+     * True when the backend owns the whole transport: it discovers the local
+     * runtime, starts/stops the process, and picks the endpoint. No API key is
+     * ever transmitted and an endpoint would be meaningless, so the Settings
+     * page hides both fields and explains what the provider needs instead.
+     */
+    backendManaged?: boolean;
   }
 > = {
   openai: { name: 'OpenAI', defaultModel: 'gpt-5-nano-2025-08-07', requiresKey: true },
@@ -202,6 +286,16 @@ export const PROVIDER_INFO: Record<
     defaultModel: 'gemma3:4b',
     requiresKey: false,
     defaultBaseUrl: 'http://localhost:11434',
+  },
+  // The WorkBuddy app-server bundled with the local WorkBuddy install. No API
+  // key and no endpoint: the signed-in WorkBuddy account supplies the model
+  // quota. The backend discovers the CLI, starts the gateway on first use, and
+  // reaps it once idle, so `backendManaged` hides the key/endpoint fields.
+  workbuddy: {
+    name: 'WorkBuddy (App Server)',
+    defaultModel: 'deepseek-v4-flash',
+    requiresKey: false,
+    backendManaged: true,
   },
 };
 
@@ -429,9 +523,16 @@ export type ApiKeyProvider =
 // Map an LLM provider (the active-provider axis) to its key-store provider
 // name. Mirrors the backend `_PROVIDER_KEY_MAP` (gemini → google; the local
 // providers pass through). Keys are persisted under the key-store name.
-export function llmProviderToKeyProvider(provider: LLMProvider): ApiKeyProvider {
+//
+// Returns null for providers with no key slot at all: `workbuddy`
+// authenticates against the local WorkBuddy login and never transmits an API
+// key, so an entry here would be a slot the backend can never fill.
+export function llmProviderToKeyProvider(provider: LLMProvider): ApiKeyProvider | null {
   if (provider === 'gemini') return 'google';
-  return provider as ApiKeyProvider;
+  if (provider === 'workbuddy') return null;
+  // Every remaining provider matches its key-store name exactly, so the
+  // narrowed union is directly assignable — no assertion needed.
+  return provider;
 }
 
 export interface ApiKeyProviderStatus {

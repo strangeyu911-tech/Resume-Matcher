@@ -85,6 +85,36 @@ def _is_azure_foundry_gpt5_model(model: str) -> bool:
     return "gpt-5" in normalized or "gpt5_series/" in normalized
 
 
+_WORKBUDDY_MODELS: frozenset[str] | None = None
+
+
+def _workbuddy_model_ids() -> frozenset[str]:
+    """Model ids served by the WorkBuddy app-server, resolved at most once.
+
+    Capability questions (JSON mode? temperature? output limit?) are normally
+    answered from LiteLLM's registry, which knows nothing about these models.
+    This lets the capability helpers recognise them so a WorkBuddy model is not
+    silently downgraded to the conservative unknown-model fallbacks.
+
+    Returns an empty set if the app-server module cannot be imported, in which
+    case every helper keeps its previous behaviour.
+    """
+    global _WORKBUDDY_MODELS
+    if _WORKBUDDY_MODELS is None:
+        try:
+            from app.workbuddy import MODELS
+
+            _WORKBUDDY_MODELS = frozenset(MODELS)
+        except Exception:  # noqa: BLE001 - optional dependency of this module
+            _WORKBUDDY_MODELS = frozenset()
+    return _WORKBUDDY_MODELS
+
+
+def _is_workbuddy_model_name(model_name: str) -> bool:
+    """True when a bare model id belongs to the WorkBuddy app-server."""
+    return model_name in _workbuddy_model_ids()
+
+
 def _azure_foundry_api_version(config: LLMConfig) -> str | None:
     """Resolve API version for Azure Foundry calls.
 
@@ -396,15 +426,24 @@ _PROVIDER_KEY_MAP: dict[str, str] = {
     "deepseek": "deepseek",
     "groq": "groq",
     "ollama": "ollama",
+    # No key store entry: this provider authenticates through the local
+    # WorkBuddy account, not through an API key.
+    "workbuddy": "workbuddy",
 }
 
 
-# Providers where the user commonly runs a local server without auth. For
-# these, we MUST NOT fall back to ``settings.llm_api_key`` (the env-level
-# default), because the env var may hold a real paid-API key that would then
-# leak to a local/compatible endpoint the user set up expecting no auth.
-_PROVIDERS_WITHOUT_ENV_KEY_FALLBACK: frozenset[str] = frozenset(
-    {"openai_compatible", "ollama"}
+# Providers that must never inherit ``LLM_API_KEY`` from the environment, and
+# that can equally well run with no key at all:
+#   * openai_compatible / ollama — local servers that usually run unauthenticated
+#   * workbuddy — authenticates against the local WorkBuddy login and never
+#     transmits an API key, so any key in the environment is by definition not
+#     meant for it
+#
+# Keeping one set answers two questions that must never disagree: "skip the env
+# fallback in resolve_api_key?" (a paid key must not leak to a local endpoint)
+# and "is a key required?" (check_llm_health, GET /status).
+PROVIDERS_WITHOUT_API_KEY: frozenset[str] = frozenset(
+    {"openai_compatible", "ollama", "workbuddy"}
 )
 
 
@@ -412,10 +451,10 @@ def resolve_api_key(stored: dict, provider: str) -> str:
     """Resolve the effective API key from stored config.
 
     Priority: top-level ``api_key`` > ``api_keys[provider]`` > env/settings
-    default — EXCEPT for providers in ``_PROVIDERS_WITHOUT_ENV_KEY_FALLBACK``
-    (``openai_compatible`` / ``ollama``), where the env-level default is
-    skipped so a paid OpenAI key in ``LLM_API_KEY`` cannot leak to a local
-    self-hosted server when the user leaves the provider key blank.
+    default — EXCEPT for providers in ``PROVIDERS_WITHOUT_API_KEY``
+    (``openai_compatible`` / ``ollama`` / ``workbuddy``), where the env-level
+    default is skipped so a paid OpenAI key in ``LLM_API_KEY`` cannot leak to a
+    local self-hosted server when the user leaves the provider key blank.
 
     This is the single source of truth for key resolution. Every code path
     that needs an API key (runtime, config display, health check, test
@@ -430,7 +469,7 @@ def resolve_api_key(stored: dict, provider: str) -> str:
         config_provider = _PROVIDER_KEY_MAP.get(provider, provider)
         env_default = (
             ""
-            if provider in _PROVIDERS_WITHOUT_ENV_KEY_FALLBACK
+            if provider in PROVIDERS_WITHOUT_API_KEY
             else settings.llm_api_key
         )
         api_key = api_keys.get(config_provider, env_default)
@@ -495,7 +534,17 @@ def get_model_name(config: LLMConfig) -> str:
     For most providers, adds the provider prefix if not already present.
     For OpenRouter, always adds 'openrouter/' prefix since OpenRouter models
     use nested prefixes like 'openrouter/anthropic/claude-3.5-sonnet'.
+
+    ``workbuddy`` returns the bare model id: those requests never reach
+    LiteLLM, and the app-server wants the id exactly as the CLI advertises it.
     """
+    if config.provider == "workbuddy":
+        # Local import: keeps LiteLLM-only code paths from paying for the
+        # app-server module (and httpx) at import time.
+        from app.workbuddy import normalize_model
+
+        return normalize_model(config.model)
+
     provider_prefixes = {
         "openai": "",  # OpenAI models don't need prefix
         # openai_compatible: route via LiteLLM's openai/ prefix so the OpenAI
@@ -636,13 +685,101 @@ def get_router(config: LLMConfig | None = None) -> tuple[Router, LLMConfig]:
     return router, config
 
 
+async def _workbuddy_health(
+    config: LLMConfig,
+    *,
+    include_details: bool = False,
+    test_prompt: str | None = None,
+    light: bool = False,
+) -> dict[str, Any]:
+    """Health check for the local WorkBuddy app-server provider.
+
+    Mirrors the response shape of the LiteLLM path so the Settings UI and the
+    ``/config/llm-test`` endpoint need no provider-specific handling.
+
+    In full mode the probe is a real end-to-end round-trip (cold gateway start
+    included), so the timeout covers a gateway boot plus one model call. In
+    ``light`` mode no process is started at all — see ``workbuddy.readiness``.
+    """
+    from app import workbuddy
+
+    prompt = test_prompt or "Hi"
+
+    try:
+        if light:
+            outcome = await workbuddy.readiness(model=config.model)
+        else:
+            budget = float(
+                settings.workbuddy_startup_timeout_seconds
+                + settings.workbuddy_prompt_timeout_seconds
+            )
+            outcome = await workbuddy.health(model=config.model, timeout=budget, prompt=prompt)
+    except Exception as exc:  # noqa: BLE001 - never let a probe raise out of /llm-test
+        logging.exception(
+            "WorkBuddy health check raised",
+            extra={"provider": config.provider, "model": config.model},
+        )
+        outcome = {
+            "healthy": False,
+            "error_code": "health_check_failed",
+            "message": str(exc),
+            "hint": "",
+        }
+
+    if not outcome.get("healthy"):
+        # `_scrub_secrets` is applied for parity with the LiteLLM path: the
+        # hint can carry raw CLI output, and this response is rendered in the
+        # Settings UI.
+        result: dict[str, Any] = {
+            "healthy": False,
+            "provider": config.provider,
+            "model": config.model,
+            "error_code": outcome.get("error_code", "health_check_failed"),
+            "message": outcome.get("message", ""),
+        }
+        if include_details:
+            result["test_prompt"] = _to_code_block(prompt)
+            result["model_output"] = _to_code_block(None)
+            detail = "\n\n".join(
+                part for part in (outcome.get("message"), outcome.get("hint")) if part
+            )
+            result["error_detail"] = _to_code_block(_scrub_secrets(detail) or None)
+        return result
+
+    result = {
+        "healthy": True,
+        "provider": config.provider,
+        "model": config.model,
+        "response_model": outcome.get("response_model") or f"workbuddy/{config.model}",
+    }
+    # Surface the "installed but not yet verified" caveat so the UI can say so
+    # instead of implying a model round-trip already succeeded.
+    if outcome.get("warning_code"):
+        result["warning_code"] = outcome["warning_code"]
+        result["warning"] = outcome.get("warning", "")
+    if include_details:
+        result["test_prompt"] = _to_code_block(prompt)
+        result["model_output"] = _to_code_block(outcome.get("model_output"))
+        result["reasoning_content"] = None
+    return result
+
+
 async def check_llm_health(
     config: LLMConfig | None = None,
     *,
     include_details: bool = False,
     test_prompt: str | None = None,
+    light: bool = False,
 ) -> dict[str, Any]:
-    """Check if the LLM provider is accessible and working."""
+    """Check if the LLM provider is accessible and working.
+
+    Args:
+        light: For ``workbuddy``, answer from cached discovery state instead of
+            starting the app-server. Used by ``GET /status``, which is polled
+            by the UI and must not spawn a gateway process; the Settings "Test
+            connection" button leaves this False for a real round-trip. Has no
+            effect on other providers.
+    """
     if config is None:
         config = get_llm_config()
 
@@ -650,13 +787,23 @@ async def check_llm_health(
     # servers often run without auth, so a blank key is acceptable for those
     # providers — a sentinel is passed downstream (see _effective_api_key)
     # to satisfy the OpenAI client's non-empty-string validation.
-    if config.provider not in ("ollama", "openai_compatible") and not config.api_key:
+    # workbuddy authenticates against the local WorkBuddy login instead, so it
+    # never needs a key either.
+    if config.provider not in PROVIDERS_WITHOUT_API_KEY and not config.api_key:
         return {
             "healthy": False,
             "provider": config.provider,
             "model": config.model,
             "error_code": "api_key_missing",
         }
+
+    if config.provider == "workbuddy":
+        return await _workbuddy_health(
+            config,
+            include_details=include_details,
+            test_prompt=test_prompt,
+            light=light,
+        )
 
     model_name = get_model_name(config)
 
@@ -761,6 +908,126 @@ async def check_llm_health(
         return result
 
 
+async def _workbuddy_chat(
+    config: LLMConfig,
+    messages: list[dict],
+    *,
+    timeout: float | None = None,
+    response_format: Any = None,
+) -> str:
+    """One completion through the local WorkBuddy app-server.
+
+    Deliberately separate from the LiteLLM path because nothing is shared:
+    there is no Router, no api_key and no api_base — the app-server owns
+    transport, retries, and model selection. A cold call also boots the gateway
+    process, which is why callers pass a generous timeout.
+    """
+    from app import workbuddy
+
+    return await workbuddy.complete_chat(
+        messages,
+        model=config.model,
+        response_format=response_format,
+        timeout=timeout,
+    )
+
+
+def _truncation_retry_hint(schema_type: str) -> str:
+    """Extra instruction appended when a parsed JSON result looks truncated."""
+    if schema_type == "resume":
+        return (
+            "\n\nIMPORTANT: Output the COMPLETE JSON object with ALL sections. Do not truncate."
+        )
+    if schema_type == "enrichment":
+        return (
+            "\n\nIMPORTANT: Output the COMPLETE JSON object with ALL keys: "
+            "items_to_enrich, questions, analysis_summary. Do not truncate."
+        )
+    if schema_type == "interview_prep":
+        return (
+            "\n\nIMPORTANT: Output the COMPLETE JSON object with ALL keys: "
+            "role_fit_analysis, resume_questions, project_follow_ups, skill_gaps, "
+            "talking_points. Do not truncate."
+        )
+    return "\n\nIMPORTANT: Output ONLY a valid JSON object. Start with { and end with }."
+
+
+_JSON_ONLY_HINT = (
+    "\n\nIMPORTANT: Output ONLY a valid JSON object. Start with { and end with }."
+)
+
+
+async def _complete_json_workbuddy(
+    config: LLMConfig,
+    prompt: str,
+    messages: list[dict],
+    *,
+    retries: int,
+    schema_type: str,
+    max_tokens: int,
+) -> dict[str, Any]:
+    """``complete_json`` for the WorkBuddy app-server provider.
+
+    The app-server exposes no ``response_format`` parameter, so JSON mode is an
+    appended instruction (see ``workbuddy.build_prompt``). Everything else — the
+    app-level retries for malformed or truncated JSON — mirrors the LiteLLM
+    loop, so a caller gets identical behaviour from either provider.
+
+    ``messages`` is mutated across retries (the user turn gains a stricter
+    hint). The list is built per call by ``complete_json`` and never shared, so
+    that is safe.
+    """
+    timeout = _calculate_timeout("json", max_tokens, config.provider)
+
+    for attempt in range(retries + 1):
+        try:
+            content = await _workbuddy_chat(
+                config,
+                messages,
+                timeout=timeout,
+                response_format={"type": "json_object"},
+            )
+            logging.debug("WorkBuddy JSON response (attempt %d): %s", attempt + 1, content[:300])
+
+            # json.JSONDecodeError subclasses ValueError, so parse before the
+            # broader ValueError handler below.
+            result = json.loads(_extract_json(content))
+
+        except json.JSONDecodeError as exc:
+            logging.warning("WorkBuddy JSON parse failed (attempt %d): %s", attempt + 1, exc)
+            if attempt < retries:
+                messages[-1]["content"] = prompt + _JSON_ONLY_HINT
+                continue
+            raise ValueError(f"Failed to parse JSON after {retries + 1} attempts: {exc}") from exc
+
+        except ValueError as exc:
+            # Content quality — empty response, or no JSON found at all.
+            logging.warning(
+                "WorkBuddy content extraction failed (attempt %d): %s", attempt + 1, exc
+            )
+            if attempt < retries:
+                messages[-1]["content"] = prompt + _JSON_ONLY_HINT
+                continue
+            raise
+
+        if isinstance(result, dict) and _appears_truncated(result, schema_type):
+            if attempt < retries:
+                logging.warning(
+                    "WorkBuddy parsed JSON appears truncated (attempt %d/%d), retrying",
+                    attempt + 1,
+                    retries + 1,
+                )
+                messages[-1]["content"] = prompt + _truncation_retry_hint(schema_type)
+                continue
+            logging.warning(
+                "WorkBuddy parsed JSON appears truncated on final attempt, proceeding"
+            )
+
+        return result
+
+    raise ValueError(f"Failed after {retries + 1} attempts")
+
+
 async def complete(
     prompt: str,
     system_prompt: str | None = None,
@@ -770,31 +1037,43 @@ async def complete(
 ) -> str:
     """Make a completion request to the LLM.
 
-    Transport retries (429, 500, timeout) are handled by the Router.
+    Transport retries (429, 500, timeout) are handled by the Router for
+    LiteLLM-backed providers, and by the app-server's own retry for
+    ``workbuddy`` (see _workbuddy_chat).
     """
-    router, config = get_router(config)
-    model_name = get_model_name(config)
-
     messages = []
     if system_prompt:
         messages.append({"role": "system", "content": system_prompt})
     messages.append({"role": "user", "content": prompt})
 
     try:
-        kwargs: dict[str, Any] = {
-            "model": "primary",
-            "messages": messages,
-            "max_tokens": max_tokens,
-            "timeout": _calculate_timeout("completion", max_tokens, config.provider),
-        }
-        if _supports_temperature(model_name, temperature):
-            kwargs["temperature"] = temperature
-        if config.reasoning_effort:
-            kwargs["reasoning_effort"] = config.reasoning_effort
+        if config is None:
+            config = get_llm_config()
 
-        response = await router.acompletion(**kwargs)
+        if config.provider == "workbuddy":
+            content = await _workbuddy_chat(
+                config,
+                messages,
+                timeout=_calculate_timeout("completion", max_tokens, config.provider),
+            )
+        else:
+            router, config = get_router(config)
+            model_name = get_model_name(config)
 
-        content = _extract_choice_text(response.choices[0])
+            kwargs: dict[str, Any] = {
+                "model": "primary",
+                "messages": messages,
+                "max_tokens": max_tokens,
+                "timeout": _calculate_timeout("completion", max_tokens, config.provider),
+            }
+            if _supports_temperature(model_name, temperature):
+                kwargs["temperature"] = temperature
+            if config.reasoning_effort:
+                kwargs["reasoning_effort"] = config.reasoning_effort
+
+            response = await router.acompletion(**kwargs)
+            content = _extract_choice_text(response.choices[0])
+
         if not content:
             raise ValueError("Empty response from LLM")
         # Strip thinking tags from reasoning models (deepseek-r1, qwq, etc.)
@@ -806,7 +1085,7 @@ async def complete(
     except Exception as e:
         # Log the actual error server-side for debugging
         logging.error(f"LLM completion failed: {e}", extra={
-                      "model": model_name})
+                      "provider": config.provider if config else None})
         raise ValueError(
             "LLM completion failed. Please check your API configuration and try again."
         ) from e
@@ -890,6 +1169,14 @@ def get_safe_max_tokens(model_name: str, requested: int = DEFAULT_JSON_MAX_TOKEN
         Safe token count, clamped correctly and always >= 1.
     """
     safe_requested = max(1, requested)
+
+    # WorkBuddy app-server: the CLI owns token budgeting and no max_tokens is
+    # ever sent over ACP. Report a generous ceiling so callers don't clamp a
+    # long resume down to LiteLLM's 4096 unknown-model fallback.
+    if _is_workbuddy_model_name(model_name):
+        from app.workbuddy import max_output_tokens
+
+        return min(safe_requested, max_output_tokens())
 
     try:
         info = litellm.get_model_info(model=model_name)
@@ -1076,6 +1363,9 @@ def _calculate_timeout(
         "openrouter": 1.5,  # More variable latency
         "groq": 1.0,
         "ollama": 2.0,  # Local models can be slower
+        # An agent gateway adds a process hop on top of the model itself, and
+        # the first call of a session may include a cold gateway start.
+        "workbuddy": 2.0,
     }
     provider_factor = provider_factors.get(provider, 1.0)
 
@@ -1200,8 +1490,8 @@ async def complete_json(
             "keywords", or "interview_prep". Passed to _appears_truncated for
             context-aware truncation detection and used to tailor retry hints.
     """
-    router, config = get_router(config)
-    model_name = get_model_name(config)
+    if config is None:
+        config = get_llm_config()
 
     # Build messages
     json_system = (
@@ -1211,6 +1501,22 @@ async def complete_json(
         {"role": "system", "content": json_system},
         {"role": "user", "content": prompt},
     ]
+
+    # WorkBuddy app-server: no Router, no api_key, and no response_format
+    # parameter — JSON mode is an appended instruction. It gets its own loop so
+    # the LiteLLM path below stays free of provider branches.
+    if config.provider == "workbuddy":
+        return await _complete_json_workbuddy(
+            config,
+            prompt,
+            messages,
+            retries=retries,
+            schema_type=schema_type,
+            max_tokens=max_tokens,
+        )
+
+    router, config = get_router(config)
+    model_name = get_model_name(config)
 
     # Check if we can use JSON mode
     use_json_mode = _supports_json_mode(model_name)
@@ -1277,23 +1583,7 @@ async def complete_json(
                         attempt + 1,
                         retries + 1,
                     )
-                    if schema_type == "resume":
-                        hint = (
-                            "\n\nIMPORTANT: Output the COMPLETE JSON object with ALL sections. Do not truncate."
-                        )
-                    elif schema_type == "enrichment":
-                        hint = (
-                            "\n\nIMPORTANT: Output the COMPLETE JSON object with ALL keys: items_to_enrich, questions, analysis_summary. Do not truncate."
-                        )
-                    elif schema_type == "interview_prep":
-                        hint = (
-                            "\n\nIMPORTANT: Output the COMPLETE JSON object with ALL keys: role_fit_analysis, resume_questions, project_follow_ups, skill_gaps, talking_points. Do not truncate."
-                        )
-                    else:
-                        hint = (
-                            "\n\nIMPORTANT: Output ONLY a valid JSON object. Start with { and end with }."
-                        )
-                    messages[-1]["content"] = prompt + hint
+                    messages[-1]["content"] = prompt + _truncation_retry_hint(schema_type)
                     continue
                 logging.warning(
                     "Parsed JSON appears truncated on final attempt, proceeding with result"
@@ -1313,10 +1603,7 @@ async def complete_json(
                     model_name, attempt + 1,
                 )
             if attempt < retries:
-                messages[-1]["content"] = (
-                    prompt
-                    + "\n\nIMPORTANT: Output ONLY a valid JSON object. Start with { and end with }."
-                )
+                messages[-1]["content"] = prompt + _JSON_ONLY_HINT
                 continue
             raise ValueError(
                 f"Failed to parse JSON after {retries + 1} attempts: {e}")

@@ -679,6 +679,15 @@
       "selectedProvider": "SELECIONADO: {provider}",
       "modelLabel": "Modelo",
       "defaultModel": "PADRÃO: {model}",
+      "workbuddyNotice": "Não precisa de chave de API — usa a cota da sua conta local do WorkBuddy",
+      "workbuddyStatusReady": "WorkBuddy CLI {version} detectado.",
+      "workbuddyStatusUnavailable": "O WorkBuddy não foi encontrado nesta máquina.",
+      "workbuddyRestart": "Reiniciar app-server",
+      "workbuddyRescan": "Reexaminar instalação",
+      "workbuddyRunning": "app-server em execução ({model})",
+      "workbuddyIdle": "app-server ocioso (inicia no primeiro uso)",
+      "workbuddyRestartDone": "app-server parado. Ele reiniciará na próxima solicitação.",
+      "workbuddyModelHint": "Os IDs de modelo vêm do seu WorkBuddy CLI local. Escolha um da lista ou digite um ID compatível. Salvar tem efeito automático — o processo local reinicia com o novo modelo.",
       "apiKeyLabel": "Chave de API",
       "apiKeyOptionalForOllama": "(Opcional para Ollama)",
       "apiKeyOptional": "(Opcional)",
@@ -715,11 +724,20 @@
         "health_check_failed": "Falha na verificação de integridade.",
         "duplicate_v1_path": "Falha na verificação de integridade. A URL base pode conter um caminho /v1 duplicado.",
         "not_found_404": "Falha na verificação de integridade. 404 Não encontrado - verifique se a URL base corresponde ao provedor.",
-        "html_response": "Falha na verificação de integridade. A URL base retornou HTML; pode ser uma URL de console ou um caminho de gateway não suportado."
+        "html_response": "Falha na verificação de integridade. A URL base retornou HTML; pode ser uma URL de console ou um caminho de gateway não suportado.",
+        "CODEBUDDY_BINARY_NOT_FOUND": "O CLI do WorkBuddy não foi encontrado. Instale o WorkBuddy e faça login, ou defina WORKBUDDY_CLI_PATH.",
+        "CODEBUDDY_RUNTIME_NOT_FOUND": "Nenhum runtime Node.js foi encontrado para iniciar o app-server do WorkBuddy. Defina WORKBUDDY_NODE_PATH com Node 18+.",
+        "CODEBUDDY_LOGIN_REQUIRED": "O WorkBuddy recusou as credenciais do app-server. Abra o WorkBuddy, faça login e teste novamente.",
+        "CODEBUDDY_API_INCOMPATIBLE": "O CLI do WorkBuddy instalado não consegue hospedar o app-server. Atualize o WorkBuddy e tente de novo.",
+        "CODEBUDDY_SESSION_FAILED": "Não foi possível iniciar o app-server do WorkBuddy. Verifique se o WorkBuddy está instalado e conectado.",
+        "CODEBUDDY_TURN_FAILED": "O app-server do WorkBuddy não concluiu a solicitação. Tente de novo ou reinicie o app-server.",
+        "CODEBUDDY_MODEL_UNAVAILABLE": "O WorkBuddy não pode usar este modelo agora. Escolha outro na lista."
       },
       "healthWarnings": {
-        "empty_content": "O LLM retornou conteúdo vazio na verificação de integridade."
-      }
+        "empty_content": "O LLM retornou conteúdo vazio na verificação de integridade.",
+        "workbuddy_unverified": "O WorkBuddy está instalado, mas ainda não foi verificado. Use Testar conexão para confirmar a conta e o modelo."
+      },
+      "workbuddyShutdownHint": "Observação: pare o backend fechando a janela do console — o desligamento normal recupera automaticamente o processo de modelo do WorkBuddy. Forçar o encerramento pelo Gerenciador de Tarefas deixa o processo em segundo plano."
     },
     "contentGeneration": {
       "title": "Geração de Conteúdo",
